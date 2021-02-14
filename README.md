@@ -1,3 +1,3 @@
 # raspberryPi-Fancontrol
 
-see for details at https://cloud.podly.de/fancontrol/index.html 
+see for details at https://tutorials.podly.de/fancontrol/
