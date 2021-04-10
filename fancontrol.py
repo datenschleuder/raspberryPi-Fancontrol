@@ -1,56 +1,58 @@
 #!/usr/bin/env python3
 
+# adapted from Edoardo Paolo Scalafiotti <edoardo849@gmail.com>
+# https://hackernoon.com/how-to-control-a-fan-to-cool-the-cpu-of-your-raspberrypi-3313b6e7f92c
+
+from time import sleep
 import subprocess
-import time
+import RPi.GPIO as GPIO
 import logging
 from datetime import datetime
-from gpiozero import OutputDevice
 
-
-ON_THRESHOLD = 60  # (degrees Celsius) Fan kicks on at this temperature.
-OFF_THRESHOLD = 35  # (degress Celsius) Fan shuts off at this temperature.
-SLEEP_INTERVAL = 30  # (seconds) How often we check the core temperature.
-GPIO_PIN = 17  # Which GPIO pin you're using to control the fan.
+# Adjust these settings for your environment
+pin = 17
+maxTMP = 65
+minTMP = 40 
+sleepTime = 5
 
 logging.basicConfig( level=logging.INFO, filename='/var/log/fancontrol.log')
 
-def get_temp():
-    """Get the core temperature.
-    Run a shell script to get the core temp and parse the output.
-    Raises:
-        RuntimeError: if response cannot be parsed.
-    Returns:
-        float: The core temperature in degrees Celsius.
-    """
-    output = subprocess.run(['vcgencmd', 'measure_temp'], capture_output=True)
-    temp_str = output.stdout.decode()
-    try:
-        return float(temp_str.split('=')[1].split('\'')[0])
-    except (IndexError, ValueError):
-        raise RuntimeError('Could not parse temperature output.')
+def setup():
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.setwarnings(False)
+    return()
 
+def getCPUtemperature():
+    res=subprocess.check_output(['vcgencmd', 'measure_temp']).decode("utf-8")
+    temp = (res.replace("temp=","").replace("'C\n",""))
+    #print("temp is {0}".format(temp))
+    return temp
 
-if __name__ == '__main__':
-    # Validate the on and off thresholds
-    if OFF_THRESHOLD >= ON_THRESHOLD:
-        raise RuntimeError('OFF_THRESHOLD must be less than ON_THRESHOLD')
+def fanON():
+    setPin(True)
+    return()
+def fanOFF():
+    setPin(False)
+    return()
+def getTEMP():
+    CPU_temp = float(getCPUtemperature())
+    now = datetime.now()
+    if CPU_temp>maxTMP:
+        logging.info(now.strftime("%d/%m/%Y %H:%M:%S")+' fan is activated at '+str(CPU_temp)+' degrees celsius')
+        fanON()
+    elif CPU_temp<minTMP:
+        logging.info(now.strftime("%d/%m/%Y %H:%M:%S")+' fan is deactivated at '+str(CPU_temp)+' degrees celsius')
+        fanOFF()
+    return()
+def setPin(mode):
+    GPIO.output(pin, mode)
+    return()
 
-    fan = OutputDevice(GPIO_PIN)
-
+try:
+    setup() 
     while True:
-        temp = get_temp()
-
-        # Start the fan if the temperature has reached the limit and the fan
-        # isn't already running.
-        # NOTE: `fan.value` returns 1 for "on" and 0 for "off"
-        if temp > ON_THRESHOLD and not fan.value:
-            now = datetime.now()           
-            fan.on()
-            logging.info(now.strftime("%d/%m/%Y %H:%M:%S")+' Fan is off at '+str(temp)+' degrees')
-        # Stop the fan if the fan is running and the temperature has dropped
-        # to 10 degrees below the limit.
-        elif fan.value and temp < OFF_THRESHOLD:
-            now = datetime.now()
-            fan.off()
-            logging.info(now.strftime("%d/%m/%Y %H:%M:%S")+' Fan is off at '+str(temp)+' degrees')
-            time.sleep(SLEEP_INTERVAL)
+        getTEMP()
+        sleep(sleepTime)
+except KeyboardInterrupt: # trap a CTRL+C keyboard interrupt. Not needed for autorun but good for testing 
+    GPIO.cleanup() # resets all GPIO ports used by this program
